@@ -8,16 +8,35 @@ from streamlit_lottie import st_lottie
 import json
 from streamlit_extras.stylable_container import stylable_container
 
-if "access_granted" not in st.session_state:
-    st.session_state.access_granted = False
-if "access_key" not in st.session_state:
-    st.session_state.access_key = ""
-if "key_validated" not in st.session_state:
-    st.session_state.key_validated = False
+# Initialize session state keys
+for key, default in {
+    "access_granted": False,
+    "access_key": "",
+    "key_validated": False
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
+# Constants
+KEYS_URL = "https://drive.google.com/uc?export=download&id=1iDyBB5lTaXcR5TYLVYc8XAFCHwVwRrJH"
 
+# Fetch keys.json (once only)
+@st.cache_data(ttl=60)
+def fetch_keys():
+    try:
+        response = requests.get(KEYS_URL)
+        if response.status_code == 200:
+            return json.loads(response.content)
+        else:
+            st.error("⚠️ Failed to fetch access keys.")
+            st.stop()
+    except Exception as e:
+        st.error(f"⚠️ Error loading keys: {e}")
+        st.stop()
 
-# Show popup if not granted
+keys_data = fetch_keys()
+
+# Lock screen if access not granted
 if not st.session_state.access_granted:
     with stylable_container(
         key="popup",
@@ -35,34 +54,19 @@ if not st.session_state.access_granted:
         st.markdown("### 💰 Choose a Plan")
 
         plans = [
-            {"label": "₹9 for 2 searches", "link": "https://rzp.io/rzp/oFkLbwv"},
-            {"label": "₹27 for 5 searches", "link": "https://rzp.io/rzp/IDPzU2Jq"},
-            {"label": "₹37 for 10 searches", "link": "https://rzp.io/rzp/WLz4ALe"},
-            {"label": "₹149 for 50 searches", "link": "https://rzp.io/rzp/OOoZO9r"},
-            {"label": "₹247 for 100 searches", "link": "https://rzp.io/rzp/DYzuKc2p"},
+            {"label": "₹9 for 2 searches", "link": "https://rzp.io/rzp/oT2g6dfL"},
+            {"label": "₹27 for 5 searches", "link": "https://rzp.io/rzp/oT2g6dfL"},
+            {"label": "₹37 for 10 searches", "link": "https://rzp.io/rzp/oT2g6dfL"},
+            {"label": "₹149 for 50 searches", "link": "https://rzp.io/rzp/oT2g6dfL"},
+            {"label": "₹247 for 100 searches", "link": "https://rzp.io/rzp/oT2g6dfL"},
         ]
 
         for plan in plans:
             st.markdown(f"✅ [{plan['label']}]({plan['link']})", unsafe_allow_html=True)
 
-
-
         st.markdown("**🔑 Already have a key?**")
         key_input = st.text_input("Enter your access key", type="password")
         if st.button("🔓 Unlock"):
-            KEYS_URL = "https://drive.google.com/uc?export=download&id=1iDyBB5lTaXcR5TYLVYc8XAFCHwVwRrJH"
-
-            try:
-                response = requests.get(KEYS_URL)
-                if response.status_code == 200:
-                    keys_data = json.loads(response.content)
-                else:
-                    st.error("⚠️ Failed to load key data.")
-                    st.stop()
-            except Exception as e:
-                st.error(f"⚠️ Could not load key data: {e}")
-                st.stop()
-
             if key_input in keys_data and keys_data[key_input]["uses_left"] > 0:
                 st.session_state.access_granted = True
                 st.session_state.key_validated = True
@@ -73,34 +77,13 @@ if not st.session_state.access_granted:
                 st.error("❌ Invalid or expired key.")
         st.stop()
 
-# Access key management (fetch from live URL)
-KEYS_URL = "https://drive.google.com/uc?export=download&id=1iDyBB5lTaXcR5TYLVYc8XAFCHwVwRrJH"
-try:
-    response = requests.get(KEYS_URL)
-    if response.status_code == 200:
-        keys_data = json.loads(response.content)
-    else:
-        st.error("⚠️ Could not fetch access keys.")
-        st.stop()
-except Exception as e:
-    st.error(f"⚠️ Failed to fetch keys: {e}")
-    st.stop()
-
-
-
-# Lottie animation loader
-def load_lottieurl(url):
-    r = requests.get(url)
-    return r.json() if r.status_code == 200 else None
-
-# UI config
+# Show UI
 st.set_page_config(page_title="Dream11 Predictor", layout="centered")
-st_lottie(load_lottieurl("https://assets2.lottiefiles.com/packages/lf20_ydo1amjm.json"), height=150)
-
+st_lottie(requests.get("https://assets2.lottiefiles.com/packages/lf20_ydo1amjm.json").json(), height=150)
 st.title("🏏 Dream11 Team Predictor")
 st.markdown("### 🛠️ Match Setup")
 
-# Show remaining usage count (if key is valid)
+# Show usage counter
 current_key = st.session_state.get("access_key")
 if current_key and keys_data.get(current_key):
     uses_left = keys_data[current_key].get("uses_left", 0)
@@ -109,8 +92,7 @@ if current_key and keys_data.get(current_key):
         unsafe_allow_html=True
     )
 
-
-# Ensure CSVs are downloaded
+# Download necessary files
 def download_if_needed(file_id, output):
     if not os.path.exists(output):
         gdown.download(f"https://drive.google.com/uc?id={file_id}", output, quiet=False)
@@ -121,38 +103,29 @@ download_if_needed("1JZn4APJQv2vyRzUSc8Asvqy2T20W2xHK", "player_vs_player_h2h.cs
 # Load model and encoders
 model = joblib.load("models/final_model_main.pkl")
 encoder = joblib.load("models/role_encoder_main.pkl")
-
-# Load datasets
 df = pd.read_csv("final_training_data_with_date.csv", encoding="utf-8-sig")
+h2h_df = pd.read_csv("player_vs_player_h2h.csv", encoding="utf-8-sig")
 
+# Clean + prep data
 df['date'] = pd.to_datetime(df['date'], errors='coerce')
-df = df.dropna(subset=['date'])
+df.dropna(subset=['date'], inplace=True)
 
-# Standardize team names
 TEAM_CORRECTIONS = {
     "Royal Challengers Bengaluru": "Royal Challengers Bangalore",
     "RCB": "Royal Challengers Bangalore",
     "Delhi Daredevils": "Delhi Capitals",
     "Kings XI Punjab": "Punjab Kings"
-    # Add any more aliases here
 }
-df['team'] = df['team'].replace(TEAM_CORRECTIONS)
-df['opponent'] = df['opponent'].replace(TEAM_CORRECTIONS)
+df.replace({"team": TEAM_CORRECTIONS, "opponent": TEAM_CORRECTIONS}, inplace=True)
 
-h2h_df = pd.read_csv("player_vs_player_h2h.csv", encoding="utf-8-sig")
-
-def get_most_recent_players(df, team_name, count=11):
-    team_df = df[df['team'] == team_name]
+def get_most_recent_players(df, team, count=11):
+    team_df = df[df['team'] == team]
     if team_df.empty:
         return []
-
-    latest_date = team_df['date'].max()
-    recent_match = team_df[team_df['date'] == latest_date]
+    recent_match = team_df[team_df['date'] == team_df['date'].max()]
     return recent_match['player'].dropna().unique().tolist()[:count]
 
-
-
-# Team and Venue Selection
+# Team & Venue setup
 teams = sorted(df['team'].dropna().unique())
 venues = sorted(df['venue'].dropna().unique())
 
@@ -160,50 +133,37 @@ team1 = st.selectbox("Team 1", teams)
 team2 = st.selectbox("Team 2", [t for t in teams if t != team1])
 venue = st.selectbox("Venue", venues)
 
-# Select Players
-st.markdown(f"#### 🟢 {team1} Players")
-selected_team1 = []
-team1_players = sorted(df[df["team"] == team1]["player"].dropna().unique())
+# Player selection
+selected_team1, selected_team2 = [], []
 recent_team1 = get_most_recent_players(df, team1)
+recent_team2 = get_most_recent_players(df, team2)
+team1_players = sorted(df[df["team"] == team1]["player"].dropna().unique())
+team2_players = sorted(df[df["team"] == team2]["player"].dropna().unique())
 
+st.markdown(f"#### 🟢 {team1} Players")
 for i in range(11):
-    default_player = recent_team1[i] if i < len(recent_team1) else None
+    default = recent_team1[i] if i < len(recent_team1) else None
     selected_team1.append(
         st.selectbox(f"{team1} Player {i+1}", 
-                     [p for p in team1_players if p not in selected_team1 or p == default_player],
-                     index=[p for p in team1_players if p not in selected_team1 or p == default_player].index(default_player) if default_player in team1_players else 0,
+                     [p for p in team1_players if p not in selected_team1 or p == default],
+                     index=[p for p in team1_players if p not in selected_team1 or p == default].index(default) if default in team1_players else 0,
                      key=f"t1_{i}")
     )
 
-
 st.markdown(f"#### 🔴 {team2} Players")
-selected_team2 = []
-team2_players = sorted(df[df["team"] == team2]["player"].dropna().unique())
-recent_team2 = get_most_recent_players(df, team2)
-
 for i in range(11):
-    default_player = recent_team2[i] if i < len(recent_team2) else None
+    default = recent_team2[i] if i < len(recent_team2) else None
     selected_team2.append(
-        st.selectbox(f"{team2} Player {i+1}", 
-                     [p for p in team2_players if p not in selected_team2 or p == default_player],
-                     index=[p for p in team2_players if p not in selected_team2 or p == default_player].index(default_player) if default_player in team2_players else 0,
+        st.selectbox(f"{team2} Player {i+1}",
+                     [p for p in team2_players if p not in selected_team2 or p == default],
+                     index=[p for p in team2_players if p not in selected_team2 or p == default].index(default) if default in team2_players else 0,
                      key=f"t2_{i}")
     )
 
-
 selected_players = selected_team1 + selected_team2
 
-# Access key management
-
-
-if "access_granted" not in st.session_state:
-    st.session_state.access_granted = False
-    st.session_state.key_used = None
-
-
-# Predict
+# Prediction button
 if st.button("🔮 Predict Best XI"):
-
     match_data = df[df["player"].isin(selected_players) & (df["venue"] == venue)].copy()
 
     if match_data.empty:
@@ -241,24 +201,31 @@ if st.button("🔮 Predict Best XI"):
             st.success("✅ Predicted Best XI")
             st.dataframe(final_team[["player", "team", "role", "predicted_score", "designation"]])
 
-
-                # ✅ Only deduct usage in memory for logic (no writing to file)
-            current_key = st.session_state.get("access_key")
+           # Deduct usage + sync to backend
             if current_key and keys_data.get(current_key):
                 keys_data[current_key]["uses_left"] -= 1
+                try:
+                    requests.post(
+                        "https://razorpay-webhook-iub2.onrender.com/update-key",  # 🔁 Change this to your webhook server domain
+                        json={
+                            "key": current_key,
+                            "uses_left": keys_data[current_key]["uses_left"],
+                            "secret": "messiisthegoat"
+                        },
+                        timeout=4
+                    )
+                except Exception as e:
+                    st.warning("🕸️ Usage updated locally, but failed to sync to server.")
+                st.rerun()
 
-
-            # Head-to-Head Matchups
+            # Head-to-Head insights
             st.markdown("### 🔥 Head-to-Head Matchups")
-            player_team_map = {p: team1 for p in selected_team1}
-            player_team_map.update({p: team2 for p in selected_team2})
-
+            player_team_map = {p: team1 for p in selected_team1} | {p: team2 for p in selected_team2}
             h2h_matchups = h2h_df[
                 (h2h_df["batter"].isin(selected_players)) &
                 (h2h_df["bowler"].isin(selected_players)) &
                 (h2h_df["batter"] != h2h_df["bowler"])
             ]
-
             insights = []
             for _, row in h2h_matchups.iterrows():
                 batter, bowler = row["batter"], row["bowler"]
@@ -274,7 +241,7 @@ if st.button("🔮 Predict Best XI"):
             else:
                 st.info("No notable head-to-head matchups found.")
 
-            # Final Tips
+            # Fantasy Tips
             st.markdown("### 💡 Fantasy Tips")
             st.markdown("""
             🧠 **Use this team as a base only** – don't copy it blindly. Blend it with your own instincts.\n
