@@ -6,32 +6,86 @@ import os
 import gdown
 from streamlit_lottie import st_lottie
 import json
-import os
+from streamlit_extras.stylable_container import stylable_container
 
-# Load keys
-KEYS_PATH = "keys.json"
+if "access_granted" not in st.session_state:
+    st.session_state.access_granted = False
+if "access_key" not in st.session_state:
+    st.session_state.access_key = ""
+if "key_validated" not in st.session_state:
+    st.session_state.key_validated = False
 
-if not os.path.exists(KEYS_PATH):
-    with open(KEYS_PATH, "w") as f:
-        json.dump({}, f)
 
-with open(KEYS_PATH, "r") as f:
-    keys_data = json.load(f)
 
-# Ask for key if not authenticated
-if "key_validated" not in st.session_state or not st.session_state.key_validated:
-    st.warning("🔒 Please enter your access key to continue.")
-    key_input = st.text_input("Access Key", type="password")
+# Show popup if not granted
+if not st.session_state.access_granted:
+    with stylable_container(
+        key="popup",
+        css_styles="""
+            {
+                border: 2px solid #e50914;
+                padding: 20px;
+                border-radius: 10px;
+                background-color: #fffbe6;
+                margin-top: 2em;
+                box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+            }
+        """,
+    ):
+        st.markdown("### 💰 Choose a Plan")
 
-    if st.button("🔓 Unlock"):
-        if key_input in keys_data and keys_data[key_input]["uses_left"] > 0:
-            st.session_state.key_validated = True
-            st.session_state.access_key = key_input
-            st.success("✅ Access granted!")
-            st.rerun()
-        else:
-            st.error("❌ Invalid or expired key.")
+        plans = [
+            {"label": "₹9 for 2 searches", "link": "https://rzp.io/rzp/oFkLbwv"},
+            {"label": "₹27 for 5 searches", "link": "https://rzp.io/rzp/IDPzU2Jq"},
+            {"label": "₹37 for 10 searches", "link": "https://rzp.io/rzp/WLz4ALe"},
+            {"label": "₹149 for 50 searches", "link": "https://rzp.io/rzp/OOoZO9r"},
+            {"label": "₹247 for 100 searches", "link": "https://rzp.io/rzp/DYzuKc2p"},
+        ]
+
+        for plan in plans:
+            st.markdown(f"✅ [{plan['label']}]({plan['link']})", unsafe_allow_html=True)
+
+
+
+        st.markdown("**🔑 Already have a key?**")
+        key_input = st.text_input("Enter your access key", type="password")
+        if st.button("🔓 Unlock"):
+            KEYS_URL = "https://drive.google.com/uc?export=download&id=1iDyBB5lTaXcR5TYLVYc8XAFCHwVwRrJH"
+
+            try:
+                response = requests.get(KEYS_URL)
+                if response.status_code == 200:
+                    keys_data = json.loads(response.content)
+                else:
+                    st.error("⚠️ Failed to load key data.")
+                    st.stop()
+            except Exception as e:
+                st.error(f"⚠️ Could not load key data: {e}")
+                st.stop()
+
+            if key_input in keys_data and keys_data[key_input]["uses_left"] > 0:
+                st.session_state.access_granted = True
+                st.session_state.key_validated = True
+                st.session_state.access_key = key_input
+                st.success("✅ Access granted!")
+                st.rerun()
+            else:
+                st.error("❌ Invalid or expired key.")
+        st.stop()
+
+# Access key management (fetch from live URL)
+KEYS_URL = "https://drive.google.com/uc?export=download&id=1iDyBB5lTaXcR5TYLVYc8XAFCHwVwRrJH"
+try:
+    response = requests.get(KEYS_URL)
+    if response.status_code == 200:
+        keys_data = json.loads(response.content)
+    else:
+        st.error("⚠️ Could not fetch access keys.")
+        st.stop()
+except Exception as e:
+    st.error(f"⚠️ Failed to fetch keys: {e}")
     st.stop()
+
 
 
 # Lottie animation loader
@@ -45,6 +99,16 @@ st_lottie(load_lottieurl("https://assets2.lottiefiles.com/packages/lf20_ydo1amjm
 
 st.title("🏏 Dream11 Team Predictor")
 st.markdown("### 🛠️ Match Setup")
+
+# Show remaining usage count (if key is valid)
+current_key = st.session_state.get("access_key")
+if current_key and keys_data.get(current_key):
+    uses_left = keys_data[current_key].get("uses_left", 0)
+    st.markdown(
+        f"<div style='text-align:right; font-size:14px; color:green;'>🔄 Uses left: <b>{uses_left}</b></div>",
+        unsafe_allow_html=True
+    )
+
 
 # Ensure CSVs are downloaded
 def download_if_needed(file_id, output):
@@ -130,26 +194,11 @@ for i in range(11):
 selected_players = selected_team1 + selected_team2
 
 # Access key management
-with open("keys.json", "r") as f:
-    keys_data = json.load(f)
+
 
 if "access_granted" not in st.session_state:
     st.session_state.access_granted = False
     st.session_state.key_used = None
-
-if not st.session_state.access_granted:
-    key_input = st.text_input("🔑 Enter Access Key")
-    if st.button("Unlock"):
-        if key_input in keys_data:
-            if keys_data[key_input]["uses_left"] > 0:
-                st.session_state.access_granted = True
-                st.session_state.key_used = key_input
-                st.success("✅ Access granted!")
-            else:
-                st.error("❌ No searches left. Please purchase more.")
-        else:
-            st.error("❌ Invalid access key.")
-    st.stop()
 
 
 # Predict
@@ -192,12 +241,12 @@ if st.button("🔮 Predict Best XI"):
             st.success("✅ Predicted Best XI")
             st.dataframe(final_team[["player", "team", "role", "predicted_score", "designation"]])
 
-            # ✅ Only deduct usage if prediction succeeded
+
+                # ✅ Only deduct usage in memory for logic (no writing to file)
             current_key = st.session_state.get("access_key")
             if current_key and keys_data.get(current_key):
                 keys_data[current_key]["uses_left"] -= 1
-                with open(KEYS_PATH, "w") as f:
-                    json.dump(keys_data, f, indent=2)
+
 
             # Head-to-Head Matchups
             st.markdown("### 🔥 Head-to-Head Matchups")
