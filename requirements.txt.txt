@@ -1,7 +1,8 @@
 streamlit
 pandas
-joblib
 xgboost
+joblib
 requests
 streamlit-lottie
 streamlit-extras
+gdown
