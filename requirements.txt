@@ -6,3 +6,4 @@ requests
 streamlit-lottie
 streamlit-extras
 gdown
+scikit-learn
