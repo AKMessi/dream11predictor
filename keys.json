@@ -3,4 +3,9 @@
     "email": "you@example.com",
     "uses_left": 0
   }
-}
+,
+    "AD18": {
+      "email": "you@example.com",
+      "uses_left": 1
+    }
+  }
