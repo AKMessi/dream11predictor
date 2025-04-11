@@ -21,10 +21,9 @@ for key, default in {
 KEYS_URL = "https://drive.google.com/uc?export=download&id=1iDyBB5lTaXcR5TYLVYc8XAFCHwVwRrJH"
 
 # Fetch keys.json (once only)
-@st.cache_data(ttl=1)
 def fetch_keys():
     try:
-        response = requests.get(KEYS_URL)
+        response = requests.get(KEYS_URL, headers={"Cache-Control": "no-cache"})
         if response.status_code == 200:
             return json.loads(response.content)
         else:
@@ -33,6 +32,8 @@ def fetch_keys():
     except Exception as e:
         st.error(f"⚠️ Error loading keys: {e}")
         st.stop()
+
+keys_data = fetch_keys()
 
 keys_data = fetch_keys()
 
@@ -67,6 +68,8 @@ if not st.session_state.access_granted:
         st.markdown("**🔑 Already have a key?**")
         key_input = st.text_input("Enter your access key", type="password")
         if st.button("🔓 Unlock"):
+            st.write("🔍 Keys loaded:", keys_data.keys())
+
             if key_input in keys_data and keys_data[key_input]["uses_left"] > 0:
                 st.session_state.access_granted = True
                 st.session_state.key_validated = True
