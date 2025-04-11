@@ -2,29 +2,39 @@ import streamlit as st
 import pandas as pd
 import joblib
 import requests
+import os
+import gdown
 from streamlit_lottie import st_lottie
 
-# Load model and encoders
-model = joblib.load("models/final_model_main.pkl")
-encoder = joblib.load("models/role_encoder_main.pkl")
-
-# Load data
-df = pd.read_csv("https://drive.google.com/uc?export=download&id=1nnx0OU2Ub4ZNcNtc0Nf2Gmwc9zleJfs7")
-h2h_df = pd.read_csv("https://drive.google.com/uc?export=download&id=1JZn4APJQv2vyRzUSc8Asvqy2T20W2xHK")
-
-# UI Config
-st.set_page_config(page_title="Dream11 Predictor", layout="centered")
-
-# Lottie
+# Lottie animation loader
 def load_lottieurl(url):
     r = requests.get(url)
     return r.json() if r.status_code == 200 else None
 
+# UI config
+st.set_page_config(page_title="Dream11 Predictor", layout="centered")
 st_lottie(load_lottieurl("https://assets2.lottiefiles.com/packages/lf20_ydo1amjm.json"), height=150)
 
 st.title("🏏 Dream11 Team Predictor")
 st.markdown("### 🛠️ Match Setup")
 
+# Ensure CSVs are downloaded
+def download_if_needed(file_id, output):
+    if not os.path.exists(output):
+        gdown.download(f"https://drive.google.com/uc?id={file_id}", output, quiet=False)
+
+download_if_needed("1nnx0OU2Ub4ZNcNtc0Nf2Gmwc9zleJfs7", "final_full_training_data.csv")
+download_if_needed("1JZn4APJQv2vyRzUSc8Asvqy2T20W2xHK", "player_vs_player_h2h.csv")
+
+# Load model and encoders
+model = joblib.load("models/final_model_main.pkl")
+encoder = joblib.load("models/role_encoder_main.pkl")
+
+# Load datasets
+df = pd.read_csv("final_full_training_data.csv", encoding="utf-8-sig")
+h2h_df = pd.read_csv("player_vs_player_h2h.csv", encoding="utf-8-sig")
+
+# Team and Venue Selection
 teams = sorted(df['team'].dropna().unique())
 venues = sorted(df['venue'].dropna().unique())
 
@@ -32,7 +42,7 @@ team1 = st.selectbox("Team 1", teams)
 team2 = st.selectbox("Team 2", [t for t in teams if t != team1])
 venue = st.selectbox("Venue", venues)
 
-# Player Picks
+# Select Players
 st.markdown(f"#### 🟢 {team1} Players")
 selected_team1 = []
 team1_players = sorted(df[df["team"] == team1]["player"].dropna().unique())
@@ -54,7 +64,6 @@ if st.button("🔮 Predict Best XI"):
     if match_data.empty:
         st.error("❌ No data for selected players at this venue.")
     else:
-        # Encode categorical
         try:
             match_data[["team", "opponent", "role", "venue"]] = encoder.transform(
                 match_data[["team", "opponent", "role", "venue"]]
@@ -62,7 +71,6 @@ if st.button("🔮 Predict Best XI"):
         except Exception as e:
             st.warning(f"⚠️ Encoding failed: {e}")
 
-        # Features
         feature_cols = [
             "team", "opponent", "role", "venue", "avg_recent_points", "consistency",
             "avg_points_vs_role", "avg_h2h_points", "venue_points", "avg_fantasy_points_vs_bowlers",
@@ -80,7 +88,6 @@ if st.button("🔮 Predict Best XI"):
             match_data["predicted_score"] = model.predict(match_data[feature_cols])
             match_data = match_data.drop_duplicates("player").sort_values("predicted_score", ascending=False).reset_index(drop=True)
             final_team = match_data.head(11).copy()
-
             final_team["designation"] = "-"
             if not final_team.empty:
                 final_team.at[0, "designation"] = "C"
@@ -89,7 +96,7 @@ if st.button("🔮 Predict Best XI"):
             st.success("✅ Predicted Best XI")
             st.dataframe(final_team[["player", "team", "role", "predicted_score", "designation"]])
 
-            # Head-to-head
+            # Head-to-Head Matchups
             st.markdown("### 🔥 Head-to-Head Matchups")
             player_team_map = {p: team1 for p in selected_team1}
             player_team_map.update({p: team2 for p in selected_team2})
@@ -115,10 +122,10 @@ if st.button("🔮 Predict Best XI"):
             else:
                 st.info("No notable head-to-head matchups found.")
 
-            # Tips
+            # Final Tips
             st.markdown("### 💡 Fantasy Tips")
             st.markdown("""
-            🧠 **Use this team as a base only** – blend with your own instincts.\n
+            🧠 **Use this team as a base only** – don't copy it blindly. Blend it with your own instincts.\n
             🟨 Wait for toss + confirmed XI before finalizing.\n
             🚫 This is NOT financial advice. Play responsibly.
             """)
