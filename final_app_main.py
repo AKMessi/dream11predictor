@@ -5,6 +5,34 @@ import requests
 import os
 import gdown
 from streamlit_lottie import st_lottie
+import json
+import os
+
+# Load keys
+KEYS_PATH = "keys.json"
+
+if not os.path.exists(KEYS_PATH):
+    with open(KEYS_PATH, "w") as f:
+        json.dump({}, f)
+
+with open(KEYS_PATH, "r") as f:
+    keys_data = json.load(f)
+
+# Ask for key if not authenticated
+if "key_validated" not in st.session_state or not st.session_state.key_validated:
+    st.warning("🔒 Please enter your access key to continue.")
+    key_input = st.text_input("Access Key", type="password")
+
+    if st.button("🔓 Unlock"):
+        if key_input in keys_data and keys_data[key_input]["uses_left"] > 0:
+            st.session_state.key_validated = True
+            st.session_state.access_key = key_input
+            st.success("✅ Access granted!")
+            st.rerun()
+        else:
+            st.error("❌ Invalid or expired key.")
+    st.stop()
+
 
 # Lottie animation loader
 def load_lottieurl(url):
@@ -23,7 +51,7 @@ def download_if_needed(file_id, output):
     if not os.path.exists(output):
         gdown.download(f"https://drive.google.com/uc?id={file_id}", output, quiet=False)
 
-download_if_needed("1nnx0OU2Ub4ZNcNtc0Nf2Gmwc9zleJfs7", "final_full_training_data.csv")
+download_if_needed("1dtW9xD3fdoOHrBAFiKX9O18kUUs-BIuw", "final_training_data_with_date.csv")
 download_if_needed("1JZn4APJQv2vyRzUSc8Asvqy2T20W2xHK", "player_vs_player_h2h.csv")
 
 # Load model and encoders
@@ -31,8 +59,34 @@ model = joblib.load("models/final_model_main.pkl")
 encoder = joblib.load("models/role_encoder_main.pkl")
 
 # Load datasets
-df = pd.read_csv("final_full_training_data.csv", encoding="utf-8-sig")
+df = pd.read_csv("final_training_data_with_date.csv", encoding="utf-8-sig")
+
+df['date'] = pd.to_datetime(df['date'], errors='coerce')
+df = df.dropna(subset=['date'])
+
+# Standardize team names
+TEAM_CORRECTIONS = {
+    "Royal Challengers Bengaluru": "Royal Challengers Bangalore",
+    "RCB": "Royal Challengers Bangalore",
+    "Delhi Daredevils": "Delhi Capitals",
+    "Kings XI Punjab": "Punjab Kings"
+    # Add any more aliases here
+}
+df['team'] = df['team'].replace(TEAM_CORRECTIONS)
+df['opponent'] = df['opponent'].replace(TEAM_CORRECTIONS)
+
 h2h_df = pd.read_csv("player_vs_player_h2h.csv", encoding="utf-8-sig")
+
+def get_most_recent_players(df, team_name, count=11):
+    team_df = df[df['team'] == team_name]
+    if team_df.empty:
+        return []
+
+    latest_date = team_df['date'].max()
+    recent_match = team_df[team_df['date'] == latest_date]
+    return recent_match['player'].dropna().unique().tolist()[:count]
+
+
 
 # Team and Venue Selection
 teams = sorted(df['team'].dropna().unique())
@@ -46,19 +100,61 @@ venue = st.selectbox("Venue", venues)
 st.markdown(f"#### 🟢 {team1} Players")
 selected_team1 = []
 team1_players = sorted(df[df["team"] == team1]["player"].dropna().unique())
+recent_team1 = get_most_recent_players(df, team1)
+
 for i in range(11):
-    selected_team1.append(st.selectbox(f"{team1} Player {i+1}", [p for p in team1_players if p not in selected_team1], key=f"t1_{i}"))
+    default_player = recent_team1[i] if i < len(recent_team1) else None
+    selected_team1.append(
+        st.selectbox(f"{team1} Player {i+1}", 
+                     [p for p in team1_players if p not in selected_team1 or p == default_player],
+                     index=[p for p in team1_players if p not in selected_team1 or p == default_player].index(default_player) if default_player in team1_players else 0,
+                     key=f"t1_{i}")
+    )
+
 
 st.markdown(f"#### 🔴 {team2} Players")
 selected_team2 = []
 team2_players = sorted(df[df["team"] == team2]["player"].dropna().unique())
+recent_team2 = get_most_recent_players(df, team2)
+
 for i in range(11):
-    selected_team2.append(st.selectbox(f"{team2} Player {i+1}", [p for p in team2_players if p not in selected_team2], key=f"t2_{i}"))
+    default_player = recent_team2[i] if i < len(recent_team2) else None
+    selected_team2.append(
+        st.selectbox(f"{team2} Player {i+1}", 
+                     [p for p in team2_players if p not in selected_team2 or p == default_player],
+                     index=[p for p in team2_players if p not in selected_team2 or p == default_player].index(default_player) if default_player in team2_players else 0,
+                     key=f"t2_{i}")
+    )
+
 
 selected_players = selected_team1 + selected_team2
 
+# Access key management
+with open("keys.json", "r") as f:
+    keys_data = json.load(f)
+
+if "access_granted" not in st.session_state:
+    st.session_state.access_granted = False
+    st.session_state.key_used = None
+
+if not st.session_state.access_granted:
+    key_input = st.text_input("🔑 Enter Access Key")
+    if st.button("Unlock"):
+        if key_input in keys_data:
+            if keys_data[key_input]["uses_left"] > 0:
+                st.session_state.access_granted = True
+                st.session_state.key_used = key_input
+                st.success("✅ Access granted!")
+            else:
+                st.error("❌ No searches left. Please purchase more.")
+        else:
+            st.error("❌ Invalid access key.")
+    st.stop()
+
+
 # Predict
 if st.button("🔮 Predict Best XI"):
+
     match_data = df[df["player"].isin(selected_players) & (df["venue"] == venue)].copy()
 
     if match_data.empty:
@@ -95,6 +191,13 @@ if st.button("🔮 Predict Best XI"):
 
             st.success("✅ Predicted Best XI")
             st.dataframe(final_team[["player", "team", "role", "predicted_score", "designation"]])
+
+            # ✅ Only deduct usage if prediction succeeded
+            current_key = st.session_state.get("access_key")
+            if current_key and keys_data.get(current_key):
+                keys_data[current_key]["uses_left"] -= 1
+                with open(KEYS_PATH, "w") as f:
+                    json.dump(keys_data, f, indent=2)
 
             # Head-to-Head Matchups
             st.markdown("### 🔥 Head-to-Head Matchups")
