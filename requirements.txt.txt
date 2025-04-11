@@ -1,0 +1,7 @@
+streamlit
+pandas
+joblib
+xgboost
+requests
+streamlit-lottie
+streamlit-extras
