@@ -21,7 +21,7 @@ for key, default in {
 KEYS_URL = "https://drive.google.com/uc?export=download&id=1iDyBB5lTaXcR5TYLVYc8XAFCHwVwRrJH"
 
 # Fetch keys.json (once only)
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=5)
 def fetch_keys():
     try:
         response = requests.get(KEYS_URL)
