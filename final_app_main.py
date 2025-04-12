@@ -66,7 +66,7 @@ if not st.session_state.access_granted:
         st.markdown("**🔑 Already have a key?**")
         key_input = st.text_input("Enter your access key", type="password")
         if st.button("🔓 Unlock"):
-            st.write("🔍 Keys loaded:", keys_data.keys())
+            
 
             if key_input in keys_data and keys_data[key_input]["uses_left"] > 0:
                 st.session_state.access_granted = True
