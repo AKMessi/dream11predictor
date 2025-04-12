@@ -18,7 +18,7 @@ for key, default in {
         st.session_state[key] = default
 
 # Constants
-KEYS_URL = "https://drive.google.com/uc?export=download&id=1iDyBB5lTaXcR5TYLVYc8XAFCHwVwRrJH"
+KEYS_URL = "https://razorpay-webhook-iub2.onrender.com/keys"
 
 # Fetch keys.json (once only)
 def fetch_keys():
@@ -32,8 +32,6 @@ def fetch_keys():
     except Exception as e:
         st.error(f"⚠️ Error loading keys: {e}")
         st.stop()
-
-keys_data = fetch_keys()
 
 keys_data = fetch_keys()
 
