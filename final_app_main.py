@@ -204,12 +204,12 @@ if st.button("🔮 Predict Best XI"):
             st.success("✅ Predicted Best XI")
             st.dataframe(final_team[["player", "team", "role", "predicted_score", "designation"]])
 
-           # Deduct usage + sync to backend
+            # 🔄 Update usage count (no rerun)
             if current_key and keys_data.get(current_key):
                 keys_data[current_key]["uses_left"] -= 1
                 try:
                     requests.post(
-                        "https://razorpay-webhook-iub2.onrender.com/update-key",  # 🔁 Change this to your webhook server domain
+                        "https://razorpay-webhook-iub2.onrender.com/update-key",
                         json={
                             "key": current_key,
                             "uses_left": keys_data[current_key]["uses_left"],
@@ -219,38 +219,48 @@ if st.button("🔮 Predict Best XI"):
                     )
                 except Exception as e:
                     st.warning("🕸️ Usage updated locally, but failed to sync to server.")
-                st.rerun()
 
-            # Head-to-Head insights
+            # 🔥 Head-to-Head Matchups
             st.markdown("### 🔥 Head-to-Head Matchups")
             player_team_map = {p: team1 for p in selected_team1} | {p: team2 for p in selected_team2}
+
             h2h_matchups = h2h_df[
                 (h2h_df["batter"].isin(selected_players)) &
                 (h2h_df["bowler"].isin(selected_players)) &
                 (h2h_df["batter"] != h2h_df["bowler"])
             ]
+
             insights = []
             for _, row in h2h_matchups.iterrows():
-                batter, bowler = row["batter"], row["bowler"]
+                batter = row["batter"]
+                bowler = row["bowler"]
+
+                # only show if from opposing teams
                 if player_team_map.get(batter) != player_team_map.get(bowler):
-                    if row["dismissals"] >= 2:
-                        insights.append(f"🛑 **{bowler}** dismissed **{batter}** {int(row['dismissals'])} times")
-                    elif row["average_vs_bowler"] >= 35 and row["balls_faced"] >= 10:
-                        insights.append(f"🚀 **{batter}** averages {row['average_vs_bowler']:.1f} (SR {row['strike_rate']:.1f}) vs **{bowler}**")
+                    dismissals = int(row["dismissals"])
+                    avg = row.get("average_vs_bowler", 0.0)
+                    sr = row.get("strike_rate", 0.0)
+                    balls = row.get("balls_faced", 0)
+
+                    if dismissals >= 2:
+                        insights.append(f"🛑 **{bowler}** dismissed **{batter}** `{dismissals}` times.")
+                    elif avg >= 35 and balls >= 10:
+                        insights.append(f"🚀 **{batter}** averages `{avg:.1f}` (SR `{sr:.1f}`) vs **{bowler}**.")
 
             if insights:
                 for tip in insights:
                     st.markdown(f"- {tip}")
             else:
-                st.info("No notable head-to-head matchups found.")
+                st.info("ℹ️ No notable head-to-head matchups found between opposing players.")
 
-            # Fantasy Tips
+            # 💡 Fantasy Tips
             st.markdown("### 💡 Fantasy Tips")
             st.markdown("""
-            🧠 **Use this team as a base only** – don't copy it blindly. Blend it with your own instincts.\n
+            🧠 **Use this team as a base only** – don’t copy it blindly. Blend it with your own instincts.\n
             🟨 Wait for toss + confirmed XI before finalizing.\n
             🚫 This is NOT financial advice. Play responsibly.
             """)
 
         except Exception as e:
             st.error(f"Prediction failed: {e}")
+
