@@ -164,6 +164,11 @@ for i in range(11):
 selected_players = selected_team1 + selected_team2
 
 # Prediction button
+
+if current_key and keys_data.get(current_key, {}).get("uses_left", 0) <= 0:
+    st.error("❌ Your access key has no uses left. Please buy a new plan.")
+    st.stop()
+
 if st.button("🔮 Predict Best XI"):
     match_data = df[df["player"].isin(selected_players) & (df["venue"] == venue)].copy()
 
