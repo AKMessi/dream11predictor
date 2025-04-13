@@ -7,3 +7,4 @@ streamlit-lottie
 streamlit-extras
 gdown
 scikit-learn
+posthog
