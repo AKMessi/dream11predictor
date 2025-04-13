@@ -7,6 +7,12 @@ import gdown
 from streamlit_lottie import st_lottie
 import json
 from streamlit_extras.stylable_container import stylable_container
+from posthog import Posthog
+
+posthog = Posthog(
+  project_api_key='phc_6cp1CcrWciK4KhcYC3cu6PX88ViLUSmZ0Mc6lJNVABj',
+  host='https://us.i.posthog.com'
+)
 
 # Initialize session state keys
 for key, default in {
@@ -61,7 +67,13 @@ if not st.session_state.access_granted:
         ]
 
         for plan in plans:
-            st.markdown(f"✅ [{plan['label']}]({plan['link']})", unsafe_allow_html=True)
+            if st.button(plan["label"]):
+                posthog.capture(
+                distinct_id=st.session_state.get("access_key", "anonymous"),
+                event="Plan Clicked",
+                properties={"plan": plan["label"]}
+            )
+                st.markdown(f"✅ [{plan['label']}]({plan['link']})", unsafe_allow_html=True)
 
         st.markdown("**🔑 Already have a key?**")
         key_input = st.text_input("Enter your access key", type="password")
@@ -209,19 +221,25 @@ if st.button("🔮 Predict Best XI"):
 
             # 🔄 Update usage count (no rerun)
             if current_key and keys_data.get(current_key):
-                keys_data[current_key]["uses_left"] -= 1
-                try:
-                    requests.post(
-                        "https://razorpay-webhook-iub2.onrender.com/update-key",
-                        json={
-                            "key": current_key,
-                            "uses_left": keys_data[current_key]["uses_left"],
-                            "secret": "messiisthegoat"
-                        },
-                        timeout=4
-                    )
-                except Exception as e:
-                    st.warning("🕸️ Usage updated locally, but failed to sync to server.")
+                if keys_data[current_key]["uses_left"] > 0:
+                    keys_data[current_key]["uses_left"] -= 1
+                    try:
+                        requests.post(
+                            "https://razorpay-webhook-iub2.onrender.com/update-key",
+                            json={
+                                "key": current_key,
+                                "uses_left": keys_data[current_key]["uses_left"],
+                                "secret": "messiisthegoat"
+                            },
+                            timeout=4
+                        )
+                    except Exception as e:
+                        st.warning("🕸️ Usage updated locally, but failed to sync to server.")
+                else:
+                    st.error("🚫 You have exhausted your key uses. Please buy a new plan.")
+                    st.stop()
+
+
 
             # 🔥 Head-to-Head Matchups
             st.markdown("### 🔥 Head-to-Head Matchups")
